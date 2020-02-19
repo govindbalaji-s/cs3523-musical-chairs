@@ -4,7 +4,7 @@
  * Roll# :  changeme
  */
 
-#include <stdlib.h>  /* for exit, atoi */
+#include <cstdlib>  /* for exit, atoi */
 #include <iostream>  /* for fprintf */
 #include <errno.h>   /* for error code eg. E2BIG */
 #include <getopt.h>  /* for getopt */
@@ -17,15 +17,25 @@
  */
 
 void usage(int argc, char *argv[]);
-unsigned long long musical_chairs(int nplayers);
+unsigned long long musical_chairs();
 
 using namespace std;
+
+bool music_stopped;
+mutex mtx_music_stopped;
+int victim;
+mutex mtx_elimination;
+condition_variable elimination;
+vector<int> free_chairs;
+vector<bool> is_chair_free;
+vector<condition_variable> cv;
+int nplayers; 
 
 
 int main(int argc, char *argv[])
 {
     int c;
-	int nplayers = 0;
+	nplayers = 0;
 
     /* Loop through each option (and its's arguments) and populate variables */
     while (1) {
@@ -91,7 +101,7 @@ void usage(int argc, char *argv[])
     exit(EXIT_FAILURE);
 }
 
-void umpire_main(int nplayers)
+void umpire_main()
 {
     /* Add your code here */
 	/* read stdin only from umpire */
@@ -105,7 +115,7 @@ void player_main(int plid)
 	return;
 }
 
-unsigned long long musical_chairs(int nplayers)
+unsigned long long musical_chairs()
 {
 	auto t1 = chrono::steady_clock::now();
 
