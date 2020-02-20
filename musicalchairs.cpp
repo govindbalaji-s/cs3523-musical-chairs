@@ -10,6 +10,8 @@
 #include <getopt.h>  /* for getopt */
 #include <assert.h>  /* for assert */
 #include <chrono>	/* for timers */
+#include <vector>
+#include <random>
 
 
 /*
@@ -266,6 +268,15 @@ void player_main(int plid)
 	/* synchronize stdouts coming from multiple players */
 	return;
 }
+
+int pick_a_chair ()
+  {
+    static random_device dev;
+    static mt19937 rng (dev);
+
+    uniform_int_distribution<mt19937::result_type> dist(0, free_chairs.size()-1);
+    return free_chairs[dist(rng)];
+  }
 
 unsigned long long musical_chairs()
 {
