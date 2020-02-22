@@ -137,9 +137,9 @@ void usage(int argc, char *argv[])
 
 void umpire_main()
 {
-    /* Add your code here */
+  /* Add your code here */
 	/* read stdin only from umpire */
-    umpire_state state = waiting_lapstart ();
+    umpire_state state = umpire_state::wait_lapstart;
     while (true)
       {
         if (state == umpire_state::exit)
@@ -282,7 +282,7 @@ umpire_state waiting_lapstop ()
 
 void player_main(int plid)
 {
-    /* Add your code here */
+  /* Add your code here */
 	/* synchronize stdouts coming from multiple players */
 	
 	while(true)
@@ -298,7 +298,6 @@ void player_main(int plid)
 }
 
 void going_around(int plid)        //waits for sleep or music_stop
-
 {
 	bool mstop;
 
@@ -383,11 +382,35 @@ unsigned long long musical_chairs()
 {
 	auto t1 = chrono::steady_clock::now();
 
+  cout << "Musical Chairs: " << nplayers << " player game with " << 
+          nplayers - 1 << " laps.\n";
+
+  unique_lock<mutex> lck_chair (mtx_chair);
+  for (int i = 0; i < nplayers - 1; i++)
+    {
+      free_chairs.push_back (i);
+      is_chair_free.push_back (true);
+    }
+  lck_chair.unlock ();
+
+  unique_lock<mutex> lck_alive_players (mtx_alive_players);
+  for (int i = 0; i < nplayers; i++)
+    {
+      alive_players.push_back (i);
+      sleep_duration.push_back (0);
+    }
+  lck_alive_players.unlock ();
+
 	// Spawn umpire thread.
-    /* Add your code here */
+  /* Add your code here */
+  thread umpire_thread (umpire_main);
 
 	// Spawn n player threads.
     /* Add your code here */
+  for (int plid = 0; plid < nplayers; plid++)
+    player_threads.push_back (thread (player_main, plid));
+
+  umpire_thread.join ();
 
 	auto t2 = chrono::steady_clock::now();
 
