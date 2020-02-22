@@ -174,14 +174,24 @@ void waiting_lapstart ()
     lck_lap_starting.unlock ();
         // cout << "umpire waitin fo rplayers" << endl;
 
-    while (unready_count != 0)
+    unique_lock<mutex> lck_unready_count (mtx_unready_count);
+    int val_unready_count = unready_count;
+    lck_unready_count.unlock ();
+
+    while (val_unready_count != 0)
       {
         unique_lock<mutex> lck_all_ready (mtx_all_ready);
         cv_all_ready.wait (lck_all_ready);
+
+        lck_unready_count.lock ();
+        val_unready_count = unready_count;
+        lck_unready_count.unlock ();
       }
     // cout << "umpire done waiting" << endl;
 
+    lck_lap_starting.lock ();
     is_lap_starting = false;
+    lck_lap_starting.unlock ();
   }
 
 void waiting_playersleep_musicstart ()
