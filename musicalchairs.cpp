@@ -62,6 +62,7 @@ int nplayers;
 mutex mtx_is_lap_starting;
 
 bool is_lap_starting;
+mutex mtx_is_lap_starting;
 mutex mtx_lap_starting;
 condition_variable cv_lap_starting;
 
@@ -175,14 +176,24 @@ void waiting_lapstart ()
     lck_lap_starting.unlock ();
         // cout << "umpire waitin fo rplayers" << endl;
 
-    while (unready_count != 0)
+    unique_lock<mutex> lck_unready_count (mtx_unready_count);
+    int val_unready_count = unready_count;
+    lck_unready_count.unlock ();
+
+    while (val_unready_count != 0)
       {
         unique_lock<mutex> lck_all_ready (mtx_all_ready);
         cv_all_ready.wait (lck_all_ready);
+
+        lck_unready_count.lock ();
+        val_unready_count = unready_count;
+        lck_unready_count.unlock ();
       }
     // cout << "umpire done waiting" << endl;
 
+    lck_lap_starting.lock ();
     is_lap_starting = false;
+    lck_lap_starting.unlock ();
   }
 
 void waiting_playersleep_musicstart ()
@@ -487,18 +498,30 @@ unsigned long long musical_chairs()
     }
   lck_chair.unlock ();
 
-  unique_lock<mutex> lck_alive_players (mtx_alive_players);
   unique_lock<mutex> lck_unready_count (mtx_unready_count);
   unready_count = nplayers;
-  is_lap_starting = false;
-  victim = -1;
   lck_unready_count.unlock ();
+
+  unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
+  is_lap_starting = false;
+  lck_is_lap_starting.unlock ();
+
+  unique_lock<mutex> lck_victim (mtx_victim);
+  victim = -1;
+  lck_victim.unlock ();
+
+  unique_lock<mutex> lck_alive_players (mtx_alive_players);
+  unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration);
+
   for (int i = 0; i < nplayers; i++)
     {
       alive_players.push_back (i);
       sleep_duration.push_back (0);
     }
+
+  lck_sleep_duration.unlock ();
   lck_alive_players.unlock ();
+
   mtx_cv = vector<mutex>(nplayers);
   cv = vector<condition_variable>(nplayers);
 	// Spawn umpire thread.
