@@ -10,9 +10,23 @@
 #include <getopt.h>  /* for getopt */
 #include <assert.h>  /* for assert */
 #include <chrono>	/* for timers */
+#include <algorithm>
 #include <vector>
 #include <random>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
+
+enum class umpire_state
+  {
+    wait_lapstart,
+    wait_playersleep_musicstart,
+    wait_umpiresleep_musicstop,
+    wait_victim,
+    wait_lapstop,
+    exit
+  };
 
 /*
  * Forward declarations
@@ -20,6 +34,16 @@
 
 void usage(int argc, char *argv[]);
 unsigned long long musical_chairs();
+umpire_state waiting_lapstart ();
+umpire_state waiting_playersleep_musicstart ();
+umpire_state waiting_umpiresleep_musicstop ();
+umpire_state waiting_victim ();
+umpire_state waiting_lapstop ();
+
+void going_around (int plid);
+int hunting_chairs (int plid);
+int pick_a_chair ();
+
 
 using namespace std;
 
@@ -41,15 +65,6 @@ vector<int> alive_players;
 int nplayers; 
 
 vector<thread> player_threads;
-enum class umpire_state
-  {
-    wait_lapstart,
-    wait_playersleep_musicstart,
-    wait_umpiresleep_musicstop,
-    wait_victim,
-    wait_lapstop,
-    exit
-  };
 
 int main(int argc, char *argv[])
 {
@@ -103,7 +118,7 @@ int main(int argc, char *argv[])
 	}
 
     unsigned long long game_time;
-	game_time = musical_chairs(nplayers);
+	game_time = musical_chairs();
 
     cout << "Time taken for the game: " << game_time << " us" << endl;
 
@@ -124,7 +139,7 @@ void umpire_main()
 {
     /* Add your code here */
 	/* read stdin only from umpire */
-    umpire_state state = wait_lapstart;
+    umpire_state state = waiting_lapstart ();
     while (true)
       {
         if (state == umpire_state::exit)
@@ -144,12 +159,13 @@ void umpire_main()
             break;
 
           case umpire_state::wait_victim:
-            state = waitng_victim ();
+            state = waiting_victim ();
             break;
 
           case umpire_state::wait_lapstop:
             state = waiting_lapstop ();
             break;
+          }
       }
 	return;
 }
@@ -271,9 +287,9 @@ void player_main(int plid)
 	
 	while(true)
 	  {
-	  	going_around();
+	  	going_around(plid);
 
-	  	if(hunting_chairs () == -1)
+	  	if(hunting_chairs (plid) == -1)
 	  		break;
 	  }
 
@@ -281,29 +297,30 @@ void player_main(int plid)
 	return;
 }
 
-void going_around()        //waits for sleep or music_stop
+void going_around(int plid)        //waits for sleep or music_stop
 
 {
 	bool mstop;
 
 	do
 	  {
-	    cv[i].wait ();
+      unique_lock<mutex> lck_cv (mtx_cv[plid]);
+	    cv[plid].wait (lck_cv);
 
 	    unique_lock<mutex>lck_sleep_duration(mtx_sleep_duration);
-	    unsigned long long slp = sleep_duration[i];
+	    unsigned long long slp = sleep_duration[plid];
 	    lck_sleep_duration.unlock();
 
 	    if (slp > 0)
 	      {
-            this_thread::sleep_for(chrono::microseconds(slp));  //umpire thread changes the value of sleep[i] to 0
+            this_thread::sleep_for(chrono::microseconds(slp));  //umpire thread changes the value of sleep[plid] to 0
 	      }	
 
 	    unique_lock<mutex>lck_music_stopped(mtx_music_stopped);
 	    mstop = music_stopped;
 	    lck_music_stopped.unlock();
 
-	  }while(!mstop)
+	  }while(!mstop);
 }
 
 int hunting_chairs(int plid)
@@ -326,7 +343,7 @@ int hunting_chairs(int plid)
 	      	victim = plid;
 	      	lck_victim.unlock();
 
-	      	unique_lock<mutex>lck_elimination(mtx_elimination)
+	      	unique_lock<mutex>lck_elimination(mtx_elimination);
 	      	elimination.notify_one();
 	      	lck_elimination.unlock();
 
@@ -356,8 +373,7 @@ int hunting_chairs(int plid)
 
 int pick_a_chair ()
   {
-    static random_device dev;
-    static mt19937 rng (dev);
+    static mt19937 rng(chrono::steady_clock::now().time_since_epoch().count());
 
     uniform_int_distribution<mt19937::result_type> dist(0, free_chairs.size()-1);
     return free_chairs[dist(rng)];
