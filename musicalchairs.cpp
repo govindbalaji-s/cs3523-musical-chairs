@@ -59,6 +59,7 @@ int unready_count;
 mutex mtx_all_ready;
 condition_variable cv_all_ready;
 int nplayers; 
+mutex mtx_is_lap_starting;
 
 bool is_lap_starting;
 mutex mtx_lap_starting;
@@ -342,7 +343,11 @@ int idle_player (int plid)
     
 
     // cout << "waiting for lap to start" << plid << endl;
-    while (!is_lap_starting)
+    unique_lock<mutex> lck_is_lap_starting(mtx_is_lap_starting);
+    bool val_is_lap_starting = is_lap_starting;
+    lck_is_lap_starting.unlock();
+
+    while (!val_is_lap_starting)
       { 
         unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
         unique_lock<mutex> lck_alive_players (mtx_alive_players);
@@ -351,8 +356,13 @@ int idle_player (int plid)
 
         if (alive_players.size () == 1)
           return 1;
+
         lck_alive_players.unlock ();
         cv_lap_starting.wait (lck_lap_starting);
+
+        unique_lock<mutex> lck_is_lap_starting(mtx_is_lap_starting);
+    	val_is_lap_starting = is_lap_starting;
+    	lck_is_lap_starting.unlock();
       }
 
     // cout << "player is ready" << plid << endl;
