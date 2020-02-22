@@ -155,9 +155,13 @@ void umpire_main()
 
 void waiting_lapstart ()
   {
-    unique_lock<mutex> lck_all_ready (mtx_all_ready);
-    cv_all_ready.wait (lck_all_ready);
-
+    cout << "umpire waitin fo rplayers" << endl;
+    while (unready_count != 0)
+      {
+        unique_lock<mutex> lck_all_ready (mtx_all_ready);
+        cv_all_ready.wait (lck_all_ready);
+      }
+    cout << "umpire done waiting" << endl;
     string input;
     cin >> input;
     if (input != "lap_start")
@@ -249,7 +253,10 @@ int waiting_lapstop ()
         is_chair_free[i] = true;
       }
     lck_chair.unlock ();
-    unready_count = alive_players.size ();
+
+    unique_lock<mutex> lck_unready_count (mtx_unready_count);
+    unready_count += alive_players.size ();
+    lck_unready_count.unlock ();
     lck_alive_players.unlock ();
 
     cout << "======= lap# " << lap_no << " =======\n";
@@ -312,10 +319,12 @@ int going_around(int plid)        //waits for sleep or music_stop
       unique_lock<mutex> lck_cv (mtx_cv[plid]);
       unique_lock<mutex> lck_unready_count (mtx_unready_count);
       unready_count --;
+      cout << "still unready:" << unready_count << endl;
       if (unready_count == 0) 
         {
           unique_lock<mutex> lck_all_ready (mtx_all_ready);
           cv_all_ready.notify_one ();
+          cout << "umpire told we are ready" << endl;
         }
       lck_unready_count.unlock();
 	    cv[plid].wait (lck_cv);
@@ -419,7 +428,9 @@ unsigned long long musical_chairs()
   lck_chair.unlock ();
 
   unique_lock<mutex> lck_alive_players (mtx_alive_players);
-  unready_count = alive_players.size();
+  unique_lock<mutex> lck_unready_count (mtx_unready_count);
+  unready_count = nplayers;
+  lck_unready_count.unlock ();
   for (int i = 0; i < nplayers; i++)
     {
       alive_players.push_back (i);
@@ -433,12 +444,13 @@ unsigned long long musical_chairs()
 
 	// Spawn n player threads.
     /* Add your code here */
+    thread umpire_thread (umpire_main);
+
   player_threads.resize (nplayers);
   for (int plid = 0; plid < nplayers; plid++)
     player_threads[plid] = thread (player_main, plid);
 
   cout << "all players born" << endl;
-  thread umpire_thread (umpire_main);
   cout << "umpire created" << endl;
   umpire_thread.join ();
 
