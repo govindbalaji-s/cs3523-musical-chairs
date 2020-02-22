@@ -59,7 +59,6 @@ int unready_count;
 mutex mtx_all_ready;
 condition_variable cv_all_ready;
 int nplayers; 
-mutex mtx_is_lap_starting;
 
 bool is_lap_starting;
 mutex mtx_is_lap_starting;
