@@ -169,11 +169,15 @@ void waiting_lapstart ()
       }*/
 
 
-    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+    unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
     is_lap_starting = true;
+    lck_is_lap_starting.unlock ();
+
+    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
     cv_lap_starting.notify_all ();
     lck_lap_starting.unlock ();
-        // cout << "umpire waitin fo rplayers" << endl;
+
+    // cout << "umpire waitin fo rplayers" << endl;
 
     unique_lock<mutex> lck_unready_count (mtx_unready_count);
     int val_unready_count = unready_count;
@@ -206,11 +210,11 @@ void waiting_playersleep_musicstart ()
         int plid;
         cin >> plid;
 
-        unique_lock<mutex> lck_cv (mtx_cv[plid]);
         unique_lock<mutex> lck_sleep (mtx_sleep_duration);
-          cin >> sleep_duration[plid];
+        cin >> sleep_duration[plid];
         lck_sleep.unlock ();
 
+        unique_lock<mutex> lck_cv (mtx_cv[plid]);
         cv[plid].notify_one ();
         lck_cv.unlock ();
       }
@@ -235,10 +239,13 @@ void waiting_umpiresleep_musicstop ()
 
     for (int plid = 0; plid < nplayers; ++plid)
       {
-        unique_lock<mutex> lck_cv (mtx_cv[plid]);
         unique_lock<mutex> lck_sleep (mtx_sleep_duration);
         sleep_duration[plid] = 0;
+        lck_sleep.unlock ();
+
+        unique_lock<mutex> lck_cv (mtx_cv[plid]);
         cv[plid].notify_one ();
+        lck_cv.unlock ();
       }
 
   }
@@ -250,12 +257,12 @@ void waiting_victim ()
     int plid;
     unique_lock<mutex> lck_victim (mtx_victim);
     plid = victim;
-   // victim = -1;
     lck_victim.unlock ();
     while (plid == -1)
       {
         unique_lock<mutex> lck_elimination (mtx_elimination);
         elimination.wait (lck_elimination);
+
         lck_victim.lock();
         plid = victim;
         lck_victim.unlock ();
@@ -312,7 +319,7 @@ int waiting_lapstop ()
         // cout << "umpire waiting for cv lock" << endl;
         unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
         cv_lap_starting.notify_all ();
-        // cout << "umpire waiting for winner to end celebration" << endl;
+        //cout << "umpire waiting for winner to end celebration" << endl;
         lck_lap_starting.unlock ();
         player_threads[plid].join ();
         return 1;
@@ -382,11 +389,13 @@ int idle_player (int plid)
     unready_count --;
     lck_unready_count.unlock();
     // cout << "still unready:" << unready_count << endl;
+    lck_unready_count.unlock();
+
     unique_lock<mutex> lck_all_ready (mtx_all_ready);
     cv_all_ready.notify_one ();
-    lck_all_ready.unlock();
-    //cout << "umpire told we are ready" << endl;
-    
+
+    lck_all_ready.unlock ();
+
   }
 int going_around(int plid)        //waits for sleep or music_stop
 {
