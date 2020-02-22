@@ -359,7 +359,7 @@ int idle_player (int plid)
 
     while (!val_is_lap_starting)
       { 
-        unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+        
         unique_lock<mutex> lck_alive_players (mtx_alive_players);
         //check if game won
         // cout << "getting alvie lock" << plid << endl;
@@ -368,6 +368,8 @@ int idle_player (int plid)
           return 1;
 
         lck_alive_players.unlock ();
+
+        unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
         cv_lap_starting.wait (lck_lap_starting);
 
         unique_lock<mutex> lck_is_lap_starting(mtx_is_lap_starting);
@@ -378,19 +380,22 @@ int idle_player (int plid)
     // cout << "player is ready" << plid << endl;
     unique_lock<mutex> lck_unready_count (mtx_unready_count);
     unready_count --;
+    lck_unready_count.unlock();
     // cout << "still unready:" << unready_count << endl;
     unique_lock<mutex> lck_all_ready (mtx_all_ready);
     cv_all_ready.notify_one ();
+    lck_all_ready.unlock();
     //cout << "umpire told we are ready" << endl;
-    lck_unready_count.unlock();
+    
   }
 int going_around(int plid)        //waits for sleep or music_stop
 {
-	bool mstop; //bool ready_signalled = false;
+  bool mstop; //bool ready_signalled = false;
   // cout << plid << "is going around" << endl;
   unique_lock<mutex>lck_music_stopped(mtx_music_stopped);
   mstop = music_stopped;
   lck_music_stopped.unlock();
+
 	while (!mstop)
 	  {
       // cout << "waiting for lck_cv#" << plid << endl;
@@ -437,6 +442,8 @@ int hunting_chairs(int plid)
 	    if(free_chairs.size () == 0)
 	      {	 
            // cout << "i am dying" << plid << endl;
+	      	lck_chair.unlock();
+
 	      	unique_lock<mutex>lck_alive_players (mtx_alive_players);     	
 	      	alive_players.erase(remove(alive_players.begin(), alive_players.end(), plid), alive_players.end());    //remove from alive players
 	      	lck_alive_players.unlock();
