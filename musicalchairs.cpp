@@ -61,6 +61,7 @@ condition_variable cv_all_ready;
 int nplayers; 
 
 bool is_lap_starting;
+mutex mtx_is_lap_starting;
 mutex mtx_lap_starting;
 condition_variable cv_lap_starting;
 
@@ -487,18 +488,30 @@ unsigned long long musical_chairs()
     }
   lck_chair.unlock ();
 
-  unique_lock<mutex> lck_alive_players (mtx_alive_players);
   unique_lock<mutex> lck_unready_count (mtx_unready_count);
   unready_count = nplayers;
-  is_lap_starting = false;
-  victim = -1;
   lck_unready_count.unlock ();
+
+  unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
+  is_lap_starting = false;
+  lck_is_lap_starting.unlock ();
+
+  unique_lock<mutex> lck_victim (mtx_victim);
+  victim = -1;
+  lck_victim.unlock ();
+
+  unique_lock<mutex> lck_alive_players (mtx_alive_players);
+  unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration);
+
   for (int i = 0; i < nplayers; i++)
     {
       alive_players.push_back (i);
       sleep_duration.push_back (0);
     }
+
+  lck_sleep_duration.unlock ();
   lck_alive_players.unlock ();
+
   mtx_cv = vector<mutex>(nplayers);
   cv = vector<condition_variable>(nplayers);
 	// Spawn umpire thread.
