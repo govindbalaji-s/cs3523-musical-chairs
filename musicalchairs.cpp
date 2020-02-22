@@ -18,27 +18,17 @@
 #include <condition_variable>
 
 
-enum class umpire_state
-  {
-    wait_lapstart,
-    wait_playersleep_musicstart,
-    wait_umpiresleep_musicstop,
-    wait_victim,
-    wait_lapstop,
-    exit
-  };
-
 /*
  * Forward declarations
  */
 
 void usage(int argc, char *argv[]);
 unsigned long long musical_chairs();
-umpire_state waiting_lapstart ();
-umpire_state waiting_playersleep_musicstart ();
-umpire_state waiting_umpiresleep_musicstop ();
-umpire_state waiting_victim ();
-umpire_state waiting_lapstop ();
+void waiting_lapstart ();
+void waiting_playersleep_musicstart ();
+void waiting_umpiresleep_musicstop ();
+void waiting_victim ();
+int waiting_lapstop ();
 
 void going_around (int plid);
 int hunting_chairs (int plid);
@@ -139,38 +129,26 @@ void umpire_main()
 {
   /* Add your code here */
 	/* read stdin only from umpire */
-    umpire_state state = umpire_state::wait_lapstart;
+
     while (true)
       {
-        if (state == umpire_state::exit)
+         
+        waiting_lapstart ();
+            
+		waiting_playersleep_musicstart ();
+    	
+    	waiting_umpiresleep_musicstop ();
+ 		
+ 		waiting_victim ();
+        
+        if (waiting_lapstop () == 1);
           break;
-        switch (state)
-          {
-          case umpire_state::wait_lapstart:
-            state = waiting_lapstart ();
-            break;
           
-          case umpire_state::wait_playersleep_musicstart:
-            state = waiting_playersleep_musicstart ();
-            break;
-
-          case umpire_state::wait_umpiresleep_musicstop:
-            state = waiting_umpiresleep_musicstop ();
-            break;
-
-          case umpire_state::wait_victim:
-            state = waiting_victim ();
-            break;
-
-          case umpire_state::wait_lapstop:
-            state = waiting_lapstop ();
-            break;
-          }
       }
 	return;
 }
 
-umpire_state waiting_lapstart ()
+void waiting_lapstart ()
   {
     string input;
     cin >> input;
@@ -178,10 +156,10 @@ umpire_state waiting_lapstart ()
       {
         // handle error
       }
-    return umpire_state::wait_playersleep_musicstart; 
+    
   }
 
-umpire_state waiting_playersleep_musicstart ()
+void waiting_playersleep_musicstart ()
   {
     string input;
     while (true)
@@ -200,10 +178,10 @@ umpire_state waiting_playersleep_musicstart ()
         cv[plid].notify_one ();
         lck_cv.unlock ();
       }
-    return umpire_state::wait_umpiresleep_musicstop;
+    
   }
 
-umpire_state waiting_umpiresleep_musicstop ()
+void waiting_umpiresleep_musicstop ()
   {
     string input;
     while (true)
@@ -225,10 +203,10 @@ umpire_state waiting_umpiresleep_musicstop ()
         sleep_duration[plid] = 0;
         cv[plid].notify_one ();
       }
-    return umpire_state::wait_victim;
+  
   }
 
-umpire_state waiting_victim ()
+void waiting_victim ()
   {
     unique_lock<mutex> lck_elimination (mtx_elimination);
     elimination.wait (lck_elimination);
@@ -238,10 +216,10 @@ umpire_state waiting_victim ()
     plid = victim;
     lck_victim.unlock ();
     player_threads[plid].join ();
-    return umpire_state::wait_lapstop;
+  
   }
 
-umpire_state waiting_lapstop ()
+int waiting_lapstop ()
   {
     string input;
     cin >> input;
@@ -272,11 +250,11 @@ umpire_state waiting_lapstop ()
         plid = alive_players[0];
         cout << "Winner is " << plid << "\n";
         player_threads[plid].join ();
-        return umpire_state::exit;
+        return 1;
       }
     else
       {
-        return umpire_state::wait_lapstart;
+        return 0;
       }
   }
 
