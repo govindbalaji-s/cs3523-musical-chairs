@@ -265,17 +265,26 @@ void waiting_playersleep_musicstart ()
       {
         cin >> input;
         if (input == "music_start")
+          {
+            unique_lock<mutex> lck_alive_players (mtx_alive_players);
+            for (int plid : alive_players)
+              {
+                unique_lock<mutex> lck_cv (mtx_cv[plid]);
+                cv[plid].notify_one ();
+                lck_cv.unlock ();
+              }
           break;
+          }
         int plid;
         cin >> plid;
 
-        unique_lock<mutex> lck_cv (mtx_cv[plid]);
+        //unique_lock<mutex> lck_cv (mtx_cv[plid]);
         unique_lock<mutex> lck_sleep (mtx_sleep_duration);
           cin >> sleep_duration[plid];
         lck_sleep.unlock ();
 
-        cv[plid].notify_one ();
-        lck_cv.unlock ();
+        //cv[plid].notify_one ();
+        //lck_cv.unlock ();
       }
     
   }
