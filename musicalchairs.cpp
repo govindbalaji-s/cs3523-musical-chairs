@@ -33,6 +33,7 @@ int waiting_lapstop ();
 
 int idle_player (int plid);
 int going_around (int plid);
+void looking_to_sleep (int plid);
 int hunting_chairs (int plid);
 int pick_a_chair ();
 
@@ -41,6 +42,9 @@ using namespace std;
 
 bool music_stopped = false;
 mutex mtx_music_stopped;
+condition_variable cv_music_stopped;
+
+
 mutex mtx_sleep_duration;
 mutex mtx_victim;
 int victim;
@@ -66,60 +70,14 @@ mutex mtx_is_lap_starting;
 mutex mtx_lap_starting;
 condition_variable cv_lap_starting;
 
+bool is_music_start;
+mutex mtx_music_started;
+condition_variable cv_music_started;
+
 vector<thread> player_threads;
 
 #define DEBUG false
 
-/*class ReadWriteLock
-  {
-    mutex mtx;
-    mutex rwmtx;
-    int readers_count = 0;
-  public:
-    void read_lock ()
-      {
-        unique_lock<mutex> lck (mtx);
-        ++readers_count;
-        if (readers_count == 1)
-          rwmtx.lock ()
-      }
-    void read_unlock ()
-      {
-        unique_lock<mutex> lck (mtx);
-        --readers_count;
-        if (readers_count == 0 && waiting_writers > 0)
-          {
-            lck.unlock ();
-            cv_writer.notify_one ();
-          }
-      }
-    void write_lock ()
-      {
-        unique_lock<mutex> lck (mtx);
-        ++waiting_writers;
-        while (writing || readers_count > 0)
-          cv_writer.wait (lck);
-        --waiting_writers;
-        writing = true;
-      }
-    void write_unlock ()
-      {
-        unique_lock<mutex> lck (mtx);
-        if (waiting_writers > 0)
-          { 
-            lck.unlock ();
-            cv_writer.notify_one ();
-          }
-        else
-          { 
-            writing = false;
-            lck.unlock ();
-            cv_reader.notify_all ();
-          }
-      }
-  };*/
-
-//ReadWriteLock pick_throw_lck;
 shared_timed_mutex pick_throw_mtx;
 vector<mutex> single_chair;
 
@@ -223,22 +181,24 @@ void waiting_lapstart ()
       {
         // handle error
       }*/
-
+    unique_lock<mutex> lck_music_started (mtx_music_started);
+    is_music_start = false;
+    lck_music_started.unlock ();
 
     unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
-    unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
+    //unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
     is_lap_starting = true;
-    lck_is_lap_starting.unlock ();
+    //lck_is_lap_starting.unlock ();
     cv_lap_starting.notify_all ();
     lck_lap_starting.unlock ();
     if(DEBUG) cout << "umpire waitin fo rplayers" << endl;
 
     unique_lock<mutex> lck_all_ready (mtx_all_ready);
-    unique_lock<mutex> lck_unready_count (mtx_unready_count);
-    int val_unready_count = unready_count;
-    lck_unready_count.unlock ();
+    //unique_lock<mutex> lck_unready_count (mtx_unready_count);
+    //int val_unready_count = unready_count;
+    //lck_unready_count.unlock ();
 
-    while (val_unready_count != 0)
+    while (unready_count != 0)
       {
         if(DEBUG) cout << "uda" << endl;
         
@@ -266,14 +226,19 @@ void waiting_playersleep_musicstart ()
         cin >> input;
         if (input == "music_start")
           {
-            unique_lock<mutex> lck_alive_players (mtx_alive_players);
+            /*unique_lock<mutex> lck_alive_players (mtx_alive_players);
             for (int plid : alive_players)
               {
                 unique_lock<mutex> lck_cv (mtx_cv[plid]);
                 cv[plid].notify_one ();
                 lck_cv.unlock ();
               }
-          break;
+              */
+            unique_lock<mutex> lck_music_started (mtx_music_started);
+            is_music_start = true;
+            cv_music_started.notify_all ();
+            lck_music_started.unlock ();
+            break;
           }
         int plid;
         cin >> plid;
@@ -303,9 +268,10 @@ void waiting_umpiresleep_musicstop ()
       }
     unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
     music_stopped = true;
+    cv_music_stopped.notify_all ();
     lck_music_stopped.unlock ();
 
-    for (int plid = 0; plid < nplayers; ++plid)
+    /*for (int plid = 0; plid < nplayers; ++plid)
       {
         unique_lock<mutex> lck_cv (mtx_cv[plid]);
         unique_lock<mutex> lck_sleep (mtx_sleep_duration);
@@ -314,6 +280,7 @@ void waiting_umpiresleep_musicstop ()
         cv[plid].notify_one ();
         lck_cv.unlock ();
       }
+      */
 
   }
 
@@ -415,6 +382,7 @@ void player_main(int plid)
       // cout << "id" << plid << endl;
       if (idle_player (plid) == 1)
         break;
+      looking_to_sleep (plid);
        // cout << "ga" << plid << endl;
 	  	if (going_around(plid) == 1)
         break;
@@ -473,12 +441,35 @@ int idle_player (int plid)
 
     if(DEBUG) cout << "umpire told we are ready" << endl;
   }
+
+void looking_to_sleep (int plid)
+  {
+    unique_lock<mutex> lck_music_started (mtx_music_started);
+    while (!is_music_start)
+      cv_music_started.wait (lck_music_started);
+    lck_music_started.unlock ();
+
+    unique_lock<mutex>lck_sleep_duration(mtx_sleep_duration);
+    unsigned long long slp = sleep_duration[plid];
+    lck_sleep_duration.unlock();
+
+    if (slp > 0)
+      {
+          if (DEBUG) cout << plid << " sleeping for " << slp << endl;
+          this_thread::sleep_for(chrono::microseconds(slp));  //umpire thread changes the value of sleep[plid] to 0
+      }  
+  }
+
 int going_around(int plid)        //waits for sleep or music_stop
 {
 	bool mstop; //bool ready_signalled = false;
   if(DEBUG)  cout << plid << "is going around" << endl;
 
-  unique_lock<mutex> lck_cv (mtx_cv[plid]);
+  unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
+  while (!music_stopped)
+    cv_music_stopped.wait (lck_music_stopped);
+  lck_music_stopped.unlock ();
+  /*unique_lock<mutex> lck_cv (mtx_cv[plid]);
   unique_lock<mutex>lck_music_stopped(mtx_music_stopped);
   mstop = music_stopped;
   lck_music_stopped.unlock();
@@ -494,24 +485,16 @@ int going_around(int plid)        //waits for sleep or music_stop
       //   }
 	    cv[plid].wait (lck_cv);
       // cout <<"waiting for alive lock" << plid << endl;
-      
+      cout << plid << " got a signal" << endl;
 
       //cout << "in ga: lck_cv obtained or whatever#" << plid << endl;
-	    unique_lock<mutex>lck_sleep_duration(mtx_sleep_duration);
-	    unsigned long long slp = sleep_duration[plid];
-	    lck_sleep_duration.unlock();
-
-	    if (slp > 0)
-	      {
-            this_thread::sleep_for(chrono::microseconds(slp));  //umpire thread changes the value of sleep[plid] to 0
-	      }	
 
 	    unique_lock<mutex>lck_music_stopped(mtx_music_stopped);
 	    mstop = music_stopped;
 	    lck_music_stopped.unlock();
 
 	  }
-    lck_cv.unlock ();
+    lck_cv.unlock ();*/
 
     return 0;
 }
@@ -619,6 +602,10 @@ unsigned long long musical_chairs()
   unique_lock<mutex> lck_is_lap_starting (mtx_is_lap_starting);
   is_lap_starting = false;
   lck_is_lap_starting.unlock ();
+
+  unique_lock<mutex> lck_music_started (mtx_music_started);
+  is_music_start = false;
+  lck_music_started.unlock ();
 
   unique_lock<mutex> lck_victim (mtx_victim);
   victim = -1;

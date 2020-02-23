@@ -1,0 +1,5 @@
+lap_start
+player_sleep 0 1000
+music_start
+music_stop
+lap_stop
