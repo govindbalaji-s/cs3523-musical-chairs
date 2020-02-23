@@ -16,6 +16,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <shared_mutex>
 
 
 /*
@@ -45,7 +46,7 @@ mutex mtx_victim;
 int victim;
 mutex mtx_elimination;
 condition_variable elimination;
-mutex mtx_chair;
+//mutex mtx_chair;
 vector<int> free_chairs;
 vector<bool> is_chair_free;
 vector<unsigned long long> sleep_duration;
@@ -68,6 +69,59 @@ condition_variable cv_lap_starting;
 vector<thread> player_threads;
 
 #define DEBUG false
+
+/*class ReadWriteLock
+  {
+    mutex mtx;
+    mutex rwmtx;
+    int readers_count = 0;
+  public:
+    void read_lock ()
+      {
+        unique_lock<mutex> lck (mtx);
+        ++readers_count;
+        if (readers_count == 1)
+          rwmtx.lock ()
+      }
+    void read_unlock ()
+      {
+        unique_lock<mutex> lck (mtx);
+        --readers_count;
+        if (readers_count == 0 && waiting_writers > 0)
+          {
+            lck.unlock ();
+            cv_writer.notify_one ();
+          }
+      }
+    void write_lock ()
+      {
+        unique_lock<mutex> lck (mtx);
+        ++waiting_writers;
+        while (writing || readers_count > 0)
+          cv_writer.wait (lck);
+        --waiting_writers;
+        writing = true;
+      }
+    void write_unlock ()
+      {
+        unique_lock<mutex> lck (mtx);
+        if (waiting_writers > 0)
+          { 
+            lck.unlock ();
+            cv_writer.notify_one ();
+          }
+        else
+          { 
+            writing = false;
+            lck.unlock ();
+            cv_reader.notify_all ();
+          }
+      }
+  };*/
+
+//ReadWriteLock pick_throw_lck;
+shared_timed_mutex pick_throw_mtx;
+vector<mutex> single_chair;
 
 int main(int argc, char *argv[])
 {
@@ -293,13 +347,19 @@ int waiting_lapstop ()
 
     unique_lock<mutex> lck_alive_players (mtx_alive_players);
     int lap_no = nplayers - alive_players.size ();
-    unique_lock<mutex> lck_chair (mtx_chair);
+    //unique_lock<mutex> lck_chair (mtx_chair);
+    //pick_throw_lck.write_lock ();
+    unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
     for(int i = 0; i < alive_players.size()-1; i++)
       {
         free_chairs.push_back (i);
+        unique_lock<mutex> lck_sit (single_chair[i]);
         is_chair_free[i] = true;
+        lck_sit.unlock ();
       }
-    lck_chair.unlock ();
+    //lck_chair.unlock ();
+    // pick_throw_lck.write_unlock ();
+    throw_lck.unlock ();
 
     unique_lock<mutex> lck_unready_count (mtx_unready_count);
     unready_count += alive_players.size ();
@@ -453,14 +513,18 @@ int hunting_chairs(int plid)
 	/*function for finding chairs*/
 	while(true)
 	  {
-	    unique_lock<mutex>lck_chair (mtx_chair);
+	    //unique_lock<mutex>lck_chair (mtx_chair);
       // cout << "free chairs:";
       // for(int c : free_chairs)
       //   cout << c << '#';
       // cout << endl;
+      //pick_throw_lck.read_lock ();
+      shared_lock<shared_timed_mutex> pick_lck (pick_throw_mtx);
 	    if(free_chairs.size () == 0)
 	      {	 
-          lck_chair.unlock ();
+          //lck_chair.unlock ();
+          //pick_throw_lck.read_unlock ();
+          pick_lck.unlock ();
            if(DEBUG)  cout << "i am dying" << plid << endl;
 	      	unique_lock<mutex>lck_alive_players (mtx_alive_players);     	
 	      	alive_players.erase(remove(alive_players.begin(), alive_players.end(), plid), alive_players.end());    //remove from alive players
@@ -478,21 +542,31 @@ int hunting_chairs(int plid)
 	      }
 
 		int i = pick_a_chair ();
-		lck_chair.unlock ();
+		//lck_chair.unlock ();
+    //pick_throw_lck.read_unlock ();
+    pick_lck.unlock ();
 
-		lck_chair.lock ();
-
+    //if (DEBUG) cout << plid << "#picked chair#" << i << endl; 
+		//lck_chair.lock ();
+    unique_lock<mutex> lck_sit (single_chair[i]);
 		if (is_chair_free[i])
 		  {
+        is_chair_free[i] = false;
+        lck_sit.unlock ();
+        //if (DEBUG) cout << plid << "#sat on chair#" << i << endl;
 
+        //pick_throw_lck.write_lock ();
+        unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
 		  	free_chairs.erase(remove(free_chairs.begin(), free_chairs.end(), i), free_chairs.end());     //remove it from free chairs list
+        //pick_throw_lck.write_unlock ();
+        throw_lck.unlock ();
 
-		    is_chair_free[i] = false;
+        //if (DEBUG) cout << plid << "#threw chair" << endl;
 		    
 		    return i;
 		  }
-		
-		lck_chair.unlock ();
+		lck_sit.unlock ();
+		//lck_chair.unlock ();
 
 	  } 
 
@@ -514,13 +588,20 @@ unsigned long long musical_chairs()
   cout << "Musical Chairs: " << nplayers << " player game with " << 
           nplayers - 1 << " laps." << endl;
 
-  unique_lock<mutex> lck_chair (mtx_chair);
+  single_chair = vector<mutex> (nplayers - 1);
+  //unique_lock<mutex> lck_chair (mtx_chair);
+ // pick_throw_lck.write_lock ();
+  unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
   for (int i = 0; i < nplayers - 1; i++)
     {
       free_chairs.push_back (i);
+      unique_lock<mutex> lck (single_chair[i]);
       is_chair_free.push_back (true);
+      lck.unlock ();
     }
-  lck_chair.unlock ();
+  //lck_chair.unlock ();
+  // pick_throw_lck.write_unlock ();
+    throw_lck.unlock ();
 
   unique_lock<mutex> lck_unready_count (mtx_unready_count);
   unready_count = nplayers;
