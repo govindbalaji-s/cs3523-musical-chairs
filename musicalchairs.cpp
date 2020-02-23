@@ -250,10 +250,13 @@ waiting_victim (void)
     if(DEBUG) cout << "umpire waiting for victim" << endl;
 
     unique_lock<mutex> lck_elimination (mtx_elimination);
+    int plid;
     while (victim == -1)
       elimination.wait (lck_elimination);
-    player_threads[victim].join ();
+    plid = victim;
     lck_elimination.unlock ();
+
+    player_threads[plid].join ();
 
     if(DEBUG) cout << "umpire signalled victim" << endl;  
   }
@@ -354,7 +357,7 @@ idle_player (int plid)
     
     unique_lock<mutex> lck_all_ready (mtx_all_ready);
     unready_count --;
-    if (unready_count == 0)
+    //if (unready_count == 0)
       cv_all_ready.notify_one ();
     lck_all_ready.unlock ();
 
