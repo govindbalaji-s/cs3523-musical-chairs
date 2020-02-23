@@ -54,7 +54,7 @@ shared_timed_mutex          pick_throw_mtx;
 vector<mutex>               single_chair;
 
 vector<unsigned long long>  sleep_duration;
-mutex                       mtx_sleep_duration;
+vector<mutex>               mtx_sleep_duration;
 
 mutex                       mtx_alive_players;
 vector<int>                 alive_players;
@@ -216,7 +216,7 @@ waiting_playersleep_musicstart (void)
         int plid;
         cin >> plid;
 
-        unique_lock<mutex> lck_sleep (mtx_sleep_duration);
+        unique_lock<mutex> lck_sleep (mtx_sleep_duration[plid]);
         cin >> sleep_duration[plid];
         lck_sleep.unlock ();
       }    
@@ -369,7 +369,7 @@ looking_to_sleep (int plid)
       cv_music_started.wait (lck_music_started);
     lck_music_started.unlock ();
 
-    unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration);
+    unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[plid]);
     unsigned long long slp = sleep_duration[plid];
     lck_sleep_duration.unlock ();
 
@@ -491,16 +491,17 @@ musical_chairs(void)
   victim = -1;
   lck_elimination.unlock ();
 
+  mtx_sleep_duration = vector<mutex> (nplayers);
   unique_lock<mutex> lck_alive_players (mtx_alive_players);
-  unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration);
 
   for (int i = 0; i < nplayers; i++)
     {
       alive_players.push_back (i);
+      unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[i]);
       sleep_duration.push_back (0);
+      lck_sleep_duration.unlock ();
     }
 
-  lck_sleep_duration.unlock ();
   lck_alive_players.unlock ();
 
   thread umpire_thread (umpire_main);
