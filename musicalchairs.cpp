@@ -177,6 +177,13 @@ reset_globals (void)
     winner          = false;
     lck_lap_starting.unlock ();
 
+    for (int plid = 0; plid < nplayers; ++plid)
+      {
+        unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[plid]);
+        sleep_duration[plid] = 0;
+        lck_sleep_duration.unlock ();
+      }
+
     unique_lock<shared_timed_mutex> lck_music_started (mtx_music_started);
     is_music_start  = false;
     lck_music_started.unlock ();
@@ -308,13 +315,6 @@ waiting_lapstop (void)
   {
     string input;
     cin >> input;
-
-    for (int plid = 0; plid < nplayers; ++plid)
-      {
-        unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[plid]);
-        sleep_duration[plid] = 0;
-        lck_sleep_duration.unlock ();
-      }
 
     unique_lock<mutex> lck_alive_players (mtx_alive_players);
     if (alive_players.size () == 1)
