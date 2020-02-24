@@ -294,7 +294,7 @@ waiting_victim (void)
       elimination.wait (lck_elimination);
 
     cout << victim << " could not get chair\n**********************" << endl;
-    player_threads[victim].join ();
+    //player_threads[victim].join ();
     lck_elimination.unlock ();
 
     if(DEBUG) cout << "umpire signalled victim" << endl;  
@@ -317,14 +317,15 @@ waiting_lapstop (void)
     if (alive_players.size () == 1)
       {
         cout << "Winner is " << alive_players[0] << endl;
+        lck_alive_players.unlock ();
+
         // if(DEBUG)  cout << "umpire waiting for cv lock" << endl;
         unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
         is_lap_starting = winner = true;
         cv_lap_starting.notify_all ();
         if(DEBUG)  cout << "umpire waiting for winner to end celebration" << endl;
         lck_lap_starting.unlock ();
-        player_threads[alive_players[0]].join ();
-        lck_alive_players.unlock ();
+        //player_threads[alive_players[0]].join ();
 
         return 1;
       }
@@ -483,6 +484,8 @@ musical_chairs(void)
     player_threads[plid] = thread (player_main, plid);
 
   umpire_thread.join ();
+  for (int plid = 0; plid < nplayers; plid ++)
+    player_threads[plid].join ();
 
 	auto t2 = chrono::steady_clock::now();
 
