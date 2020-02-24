@@ -430,11 +430,10 @@ hunting_chairs (int plid)
 		int i = pick_a_chair ();
     pick_lck.unlock ();
 
-    unique_lock<mutex> lck_sit (single_chair[i]);
-		if (is_chair_free[i])
+    unique_lock<mutex> lck_sit (single_chair[i], defer_lock);
+		if (lck_sit.try_lock () && is_chair_free[i])
 		  {
         is_chair_free[i] = false;
-        lck_sit.unlock ();
 
         unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
 		  	free_chairs.erase (remove (free_chairs.begin (),
@@ -442,10 +441,11 @@ hunting_chairs (int plid)
                                    i),
                            free_chairs.end ());     //remove it from free chairs list
         throw_lck.unlock ();
-		    
+		    lck_sit.unlock ();
+
 		    return i;
 		  }
-		lck_sit.unlock ();
+		//lck_sit.unlock ();
 	  }
 }
 
