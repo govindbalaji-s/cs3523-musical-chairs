@@ -227,9 +227,6 @@ waiting_lapstart (void)
 
     unique_lock<shared_timed_mutex> lck_lap_starting (mtx_lap_starting);
     is_lap_starting = true;
-    lck_is_lap_starting.unlock ();
-
-    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
     cv_lap_starting.notify_all ();
     lck_lap_starting.unlock ();
 
