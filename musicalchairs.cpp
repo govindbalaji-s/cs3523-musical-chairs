@@ -47,7 +47,7 @@ condition_variable          cv_music_stopped;
 int                         victim;
 mutex                       mtx_elimination;
 condition_variable          elimination;
-
+//TODO winner sync
 vector<int>                 free_chairs;
 vector<bool>                is_chair_free;
 shared_timed_mutex          pick_throw_mtx;
@@ -63,6 +63,7 @@ int                         unready_count;
 mutex                       mtx_all_ready;
 condition_variable          cv_all_ready;
 
+bool                        winner;
 bool                        is_lap_starting;
 mutex                       mtx_lap_starting;
 condition_variable          cv_lap_starting;
@@ -169,14 +170,53 @@ umpire_main (void)
   }
 
 void
-waiting_lapstart (void)
+reset_globals (void)
   {
-    string input;
-    cin >> input;
+    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+    is_lap_starting = false;
+    winner          = false;
+    lck_lap_starting.unlock ();
 
     unique_lock<mutex> lck_music_started (mtx_music_started);
-    is_music_start = false;
+    is_music_start  = false;
     lck_music_started.unlock ();
+
+    unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
+    music_stopped   = false;
+    lck_music_stopped.unlock ();
+
+    unique_lock<mutex> lck_elimination (mtx_elimination);
+    victim          = -1;
+    lck_elimination.unlock ();
+
+    unique_lock<mutex> lck_alive_players (mtx_alive_players);
+    unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
+    for(int i = 0; i < alive_players.size () - 1; i++)
+      {
+        free_chairs.push_back (i);
+        unique_lock<mutex> lck_sit (single_chair[i]);
+        is_chair_free[i] = true;
+        lck_sit.unlock ();
+      }
+    throw_lck.unlock ();
+
+    unique_lock<mutex> lck_all_ready (mtx_all_ready);
+    unready_count = alive_players.size ();
+    lck_all_ready.unlock ();
+
+    cout << "======= lap# " << nplayers - alive_players.size () + 1<< " =======" << endl;
+
+    lck_alive_players.unlock ();
+  }
+
+void
+waiting_lapstart (void)
+  {
+
+    reset_globals ();
+
+    string input;
+    cin >> input;
 
     unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
     is_lap_starting = true;
@@ -250,13 +290,12 @@ waiting_victim (void)
     if(DEBUG) cout << "umpire waiting for victim" << endl;
 
     unique_lock<mutex> lck_elimination (mtx_elimination);
-    int plid;
     while (victim == -1)
       elimination.wait (lck_elimination);
-    plid = victim;
-    lck_elimination.unlock ();
 
-    player_threads[plid].join ();
+    cout << victim << " could not get chair\n**********************" << endl;
+    player_threads[victim].join ();
+    lck_elimination.unlock ();
 
     if(DEBUG) cout << "umpire signalled victim" << endl;  
   }
@@ -267,58 +306,29 @@ waiting_lapstop (void)
     string input;
     cin >> input;
 
-    unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
-    music_stopped = false;
-    lck_music_stopped.unlock ();
+    for (int plid = 0; plid < nplayers; ++plid)
+      {
+        unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[plid]);
+        sleep_duration[plid] = 0;
+        lck_sleep_duration.unlock ();
+      }
 
     unique_lock<mutex> lck_alive_players (mtx_alive_players);
-    int lap_no = nplayers - alive_players.size ();
-
-    unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
-    for(int i = 0; i < alive_players.size () - 1; i++)
-      {
-        free_chairs.push_back (i);
-        unique_lock<mutex> lck_sit (single_chair[i]);
-        is_chair_free[i] = true;
-        lck_sit.unlock ();
-      }
-    throw_lck.unlock ();
-
-    unique_lock<mutex> lck_all_ready (mtx_all_ready);
-    unready_count += alive_players.size ();
-    lck_all_ready.unlock ();
-
-    lck_alive_players.unlock ();
-
-    cout << "======= lap# " << lap_no << " =======" << endl;
-
-    unique_lock<mutex> lck_elimination (mtx_elimination);
-    int plid = victim;
-    victim = -1;
-    lck_elimination.unlock ();
-
-    cout << plid << " could not get chair\n**********************" << endl;
-
-    lck_alive_players.lock ();
     if (alive_players.size () == 1)
       {
-        plid = alive_players[0];
-        cout << "Winner is " << plid << endl;
-        lck_alive_players.unlock ();
-        if(DEBUG)  cout << "umpire waiting for cv lock" << endl;
+        cout << "Winner is " << alive_players[0] << endl;
+        // if(DEBUG)  cout << "umpire waiting for cv lock" << endl;
         unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
-        is_lap_starting = true;
+        is_lap_starting = winner = true;
         cv_lap_starting.notify_all ();
         if(DEBUG)  cout << "umpire waiting for winner to end celebration" << endl;
         lck_lap_starting.unlock ();
-        player_threads[plid].join ();
+        player_threads[alive_players[0]].join ();
+        lck_alive_players.unlock ();
+
         return 1;
       }
-    else
-      {
-        //cout << "returning 0 only" << endl;
-        return 0;
-      }
+    return 0;
   }
 
 void
@@ -346,12 +356,9 @@ idle_player (int plid)
     unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
     while (!is_lap_starting)
       cv_lap_starting.wait (lck_lap_starting);
-    lck_lap_starting.unlock ();
-
-    unique_lock<mutex> lck_alive_players (mtx_alive_players);
-    if (alive_players.size () == 1)
+    if (winner)
       return 1;
-    lck_alive_players.unlock ();
+    lck_lap_starting.unlock ();
 
     if(DEBUG)  cout << "player is ready" << plid << endl;
     
@@ -373,14 +380,9 @@ looking_to_sleep (int plid)
     lck_music_started.unlock ();
 
     unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[plid]);
-    unsigned long long slp = sleep_duration[plid];
+    if (sleep_duration[plid] > 0)
+      this_thread::sleep_for(chrono::microseconds(sleep_duration[plid]));
     lck_sleep_duration.unlock ();
-
-    if (slp > 0)
-      {
-          if (DEBUG) cout << plid << " sleeping for " << slp << endl;
-          this_thread::sleep_for(chrono::microseconds(slp));  //umpire thread changes the value of sleep[plid] to 0
-      }  
   }
 
 void
@@ -463,48 +465,15 @@ musical_chairs(void)
           nplayers - 1 << " laps." << endl;
 
   single_chair = vector<mutex> (nplayers - 1);
-  unique_lock<shared_timed_mutex> throw_lck (pick_throw_mtx);
-  for (int i = 0; i < nplayers - 1; i++)
-    {
-      free_chairs.push_back (i);
-      unique_lock<mutex> lck (single_chair[i]);
-      is_chair_free.push_back (true);
-      lck.unlock ();
-    }
-  throw_lck.unlock ();
-
-  unique_lock<mutex> lck_all_ready (mtx_all_ready);
-  unready_count = nplayers;
-  lck_all_ready.unlock ();
-
-  unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
-  music_stopped = false;
-  lck_music_stopped.unlock ();
-
-
-  unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
-  is_lap_starting = false;
-  lck_lap_starting.unlock ();
-
-  unique_lock<mutex> lck_music_started (mtx_music_started);
-  is_music_start = false;
-  lck_music_started.unlock ();
-
-  unique_lock<mutex> lck_elimination (mtx_elimination);
-  victim = -1;
-  lck_elimination.unlock ();
+  is_chair_free = vector<bool> (nplayers - 1);
 
   mtx_sleep_duration = vector<mutex> (nplayers);
+  sleep_duration = vector<unsigned long long> (nplayers);
+
+
   unique_lock<mutex> lck_alive_players (mtx_alive_players);
-
   for (int i = 0; i < nplayers; i++)
-    {
-      alive_players.push_back (i);
-      unique_lock<mutex> lck_sleep_duration (mtx_sleep_duration[i]);
-      sleep_duration.push_back (0);
-      lck_sleep_duration.unlock ();
-    }
-
+    alive_players.push_back (i);
   lck_alive_players.unlock ();
 
   thread umpire_thread (umpire_main);
