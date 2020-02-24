@@ -41,8 +41,8 @@ int                 hunting_chairs                 (int plid);
 int                 pick_a_chair                   ();
 
 bool                        music_stopped;
-mutex                       mtx_music_stopped;
-condition_variable          cv_music_stopped;
+shared_timed_mutex          mtx_music_stopped;
+condition_variable_any      cv_music_stopped;
 
 int                         victim;
 mutex                       mtx_elimination;
@@ -65,12 +65,12 @@ condition_variable          cv_all_ready;
 
 bool                        winner;
 bool                        is_lap_starting;
-mutex                       mtx_lap_starting;
-condition_variable          cv_lap_starting;
+shared_timed_mutex          mtx_lap_starting;
+condition_variable_any      cv_lap_starting;
 
 bool                        is_music_start;
-mutex                       mtx_music_started;
-condition_variable          cv_music_started;
+shared_timed_mutex           mtx_music_started;
+condition_variable_any      cv_music_started;
 
 int                         nplayers;
 vector<thread>              player_threads;
@@ -172,16 +172,16 @@ umpire_main (void)
 void
 reset_globals (void)
   {
-    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+    unique_lock<shared_timed_mutex> lck_lap_starting (mtx_lap_starting);
     is_lap_starting = false;
     winner          = false;
     lck_lap_starting.unlock ();
 
-    unique_lock<mutex> lck_music_started (mtx_music_started);
+    unique_lock<shared_timed_mutex> lck_music_started (mtx_music_started);
     is_music_start  = false;
     lck_music_started.unlock ();
 
-    unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
+    unique_lock<shared_timed_mutex> lck_music_stopped (mtx_music_stopped);
     music_stopped   = false;
     lck_music_stopped.unlock ();
 
@@ -218,7 +218,7 @@ waiting_lapstart (void)
     string input;
     cin >> input;
 
-    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+    unique_lock<shared_timed_mutex> lck_lap_starting (mtx_lap_starting);
     is_lap_starting = true;
     cv_lap_starting.notify_all ();
     lck_lap_starting.unlock ();
@@ -246,7 +246,7 @@ waiting_playersleep_musicstart (void)
         cin >> input;
         if (input == "music_start")
           {
-            unique_lock<mutex> lck_music_started (mtx_music_started);
+            unique_lock<shared_timed_mutex> lck_music_started (mtx_music_started);
             is_music_start = true;
             cv_music_started.notify_all ();
             lck_music_started.unlock ();
@@ -278,7 +278,7 @@ waiting_umpiresleep_musicstop (void)
         this_thread::sleep_for (chrono::microseconds (umpire_sleep_time));
       }
 
-    unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
+    unique_lock<shared_timed_mutex> lck_music_stopped (mtx_music_stopped);
     music_stopped = true;
     cv_music_stopped.notify_all ();
     lck_music_stopped.unlock ();
@@ -320,7 +320,7 @@ waiting_lapstop (void)
         lck_alive_players.unlock ();
 
         // if(DEBUG)  cout << "umpire waiting for cv lock" << endl;
-        unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+        unique_lock<shared_timed_mutex> lck_lap_starting (mtx_lap_starting);
         is_lap_starting = winner = true;
         cv_lap_starting.notify_all ();
         if(DEBUG)  cout << "umpire waiting for winner to end celebration" << endl;
@@ -354,7 +354,7 @@ idle_player (int plid)
   {
     if(DEBUG)  cout << "waiting for lap to start" << plid << endl;
     
-    unique_lock<mutex> lck_lap_starting (mtx_lap_starting);
+    shared_lock<shared_timed_mutex> lck_lap_starting (mtx_lap_starting);
     while (!is_lap_starting)
       cv_lap_starting.wait (lck_lap_starting);
     if (winner)
@@ -375,7 +375,7 @@ idle_player (int plid)
 void
 looking_to_sleep (int plid)
   {
-    unique_lock<mutex> lck_music_started (mtx_music_started);
+    shared_lock<shared_timed_mutex> lck_music_started (mtx_music_started);
     while (!is_music_start)
       cv_music_started.wait (lck_music_started);
     lck_music_started.unlock ();
@@ -391,7 +391,7 @@ going_around (int plid)        //waits for sleep or music_stop
 {
   if(DEBUG)  cout << plid << "is going around" << endl;
 
-  unique_lock<mutex> lck_music_stopped (mtx_music_stopped);
+  shared_lock<shared_timed_mutex> lck_music_stopped (mtx_music_stopped);
   while (!music_stopped)
     cv_music_stopped.wait (lck_music_stopped);
   lck_music_stopped.unlock ();
