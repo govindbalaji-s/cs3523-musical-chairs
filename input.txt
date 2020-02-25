@@ -1,24 +1,72 @@
 lap_start
-player_sleep 3 1000000
-player_sleep 1 2000000
-player_sleep 2 3000000
-player_sleep 0 4000000
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
 music_start
-umpire_sleep 2000
+umpire_sleep 0
 music_stop
 lap_stop
 lap_start
-player_sleep 3 1000000
-player_sleep 1 2000000
-player_sleep 2 3000000
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
 music_start
-umpire_sleep 2000
+umpire_sleep 0
 music_stop
 lap_stop
 lap_start
-player_sleep 3 1000000
-player_sleep 1 2000000
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
 music_start
-umpire_sleep 8000
+umpire_sleep 0
+music_stop
+lap_stop
+lap_start
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
+music_start
+umpire_sleep 0
+music_stop
+lap_stop
+lap_start
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
+music_start
+umpire_sleep 0
+music_stop
+lap_stop
+lap_start
+player_sleep 3 100
+player_sleep 1 200
+player_sleep 2 300
+player_sleep 0 400
+player_sleep 4 500
+player_sleep 5 600
+player_sleep 6 700
+music_start
+umpire_sleep 0
 music_stop
 lap_stop
