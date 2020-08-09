@@ -11,6 +11,7 @@ lap_start
 player_sleep 0 1000
 player_sleep 1 2000
 player_sleep 2 3000
+player_sleep 3 4000
 music_start
 umpire_sleep 200
 music_stop
@@ -18,7 +19,9 @@ lap_stop
 lap_start
 player_sleep 0 1000
 player_sleep 1 2000
+player_sleep 2 3000
+player_sleep 3 4000
 music_start
-umpire_sleep 80
+umpire_sleep 200
 music_stop
 lap_stop
